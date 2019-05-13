@@ -1,0 +1,177 @@
+# **1. 의존성 정의**
+## 1.1  간단한 예제
+* 의존성이란 별개의 두 엔티티 사이의 연관 관계로 인해 어느 한 엔티티가 다른 엔티티의 기능 없이는 자신의 기능을 실행하지 못하는 관계를 의미한다.
+### 프레임 워크 의존성
+![Framework_Dependency.png](2019년%204월/3조/김인중/ch.2/images/Framework_Dependency.png)
+
++ 각각의 닷넷 프레임워크 어셈블리들은 닷넷 프레임 워크 버전과 동일하게 1, 1.1, 2, 3.5, 4, 4.5등의 버전을 지니며 일부 닷넷 프레임워크 어셈블리등들은 특정 버전에 새롭게 추가되어서 이전 버전의 닷넷 프레임 워크를 사용하고 있는 프로젝트에서는 참조가 불가능하다.
+* 닷넷 프레임워크 어셈블리는 항상 로드되고, 솔루션 내의 여러 프로젝트가 모드 같은 어셈블리를 참조하며, 단 하나의 어셈블리 인스턴스만 메모리에 로드되어 공유. 
+
+
+### 서드파티 의존성
+* 서드파티 개발자에 의해 개발된 어셈블리에 대한 의존성
+* 서드파티 DLL들은 솔루션 내에 별도 폴더를 생성해서 모아 둔다.
+
+## 1.2 유형 그래프를 이용한 의존성 모델링
+* 그래프(graph)는 노드(node)와 엣지(edge)라는 두 가지 요소로 구성된 수학적 구조체
+* 아래 그림과 같이 A->C로 향사는 엣지는 있지만 C->A로 향하는 엣지는 없는 그래프를 유향 그래프 혹은 다이그래프(digraph)라고 함.
+* 화살표가 시작되는 노드는 종속적인 컴포넌트, 화살표가 가리키는 노드는 의존성을 제공하는 컴포넌트
+
+
+![Framework_Dependency.png](2019년%204월/3조/김인중/ch.2/images/비순환_다이그래프.png)
+
+<비순환 다이그래프>
+
+![Framework_Dependency.png](2019년%204월/3조/김인중/ch.2/images/순환_다이그래프.png)
+
+<순환 다이그래프>
+* B->D->E->B???? 순환적 의존성을 지님...과연 끝은 어디일까....
+
+![Framework_Dependency.png](2019년%204월/3조/김인중/ch.2/images/루프_다이그래프.png)
+
+   - mermaid 
+   ```mermaid
+   graph LR;
+   A((A));
+   B((B));
+   A-->B;
+   B-->B;
+   ```
+   
+
+<루프 다이그래프>
+* 예로 재귀함수가 있음.
+
+
+# 2. 의존성 관리하기 
+안티패턴이란 ?
+ - 코드의 유연성을 해치기 때문에 사용을 지양하는 패턴
+ 
+## 2.1 구현과 인터페이스의 비교
+## 2.2 new 키워드의 코드 스멜
+ -  코드 스멜이란 어떤 코드가 잠재적으로 문제가 있을 수 있음을 표현하는 단어. 기술 부채.
+ -  인터페이스는 어떤 일을 수행할 수 있는지를 서술, 클래스는 어떻게 특정 작업을 수행할 것인지를 서술.
+ -  시그너처 : 생성자나 메서드의 정의를 말함.
+
+```cs
+class AccountController{
+        private readonly SecurityService securityService;
+
+        public AccountController()
+        {
+            this.securityService = new SecurityService();
+        }
+        public void ChangePassword(Guid userID, string newPasswd)
+        {
+            var userRepository = new UserRepository();
+            var user = userRepository.GetByID(userID);
+            this.securityService.ChangeUserPasswd(user, newPasswd);
+        }
+    }
+```
+ [위 코드 문제점] 
+ - AccountControoler 클래스는 SecurityService 클래스와 UserRepository 클래스의 구현에 대해 의존적
+ - SecurityService 클래스와 UserRepository 클래스가 가지고 있는 의존성은 AccountController 클래스의 잠재적 의존성이 됨.
+ - AccountContoller는 단위 테스트를 하기 어려움. 두 클래스의 모의 객체를 만들 수 없음.
+ - securityService.ChangeUsersPasswd 메서드는 클라이언트가 user 객체를 로드할 수 밖에 없도록 만듬.
+
+![Framework_Dependency.png](2019년%204월/3조/김인중/ch.2/images/new키워드_코드스멜.png)
+
+## 2.3 객체 생성에 대한 대안
+ - 인터페이스를 기초로 한 코딩
+ - 인터페이스란 : 어떤 일을 수행할 수 있는지를 서술.
+ - 클래스 : 어떻게 특정 작업을 수핼할 것인지 서술, 실제 구현에 대한 상세 내용 서술. 
+
+```cs
+class AccountController
+    {
+        private readonly ISecurityService securityService;
+
+
+        public AccountController()
+        {
+            securityService = new SecurityService();
+        }
+        
+        public void ChangePassword(Guid userID, string newPasswd)
+        {            
+            this.securityService.ChangeUserPasswd(userID, newPasswd);
+        }
+    }
+```
+
+```cs
+public interface ISecurityService
+{
+        void ChangeUserPasswd(Guid user, string passwd);
+}   
+
+class SecurityService : ISecurityService
+{
+        private readonly IUserRepository userRepository;
+        public SecurityService()
+        {
+            userRepository = new UserRepository();
+        }
+       
+
+        public void ChangeUserPasswd(Guid userID, string passwd)
+        {
+            var user = userRepository.GetByID(userID);
+        }
+}
+```    
+    
+![Framework_Dependency.png](2019년%204월/3조/김인중/ch.2/images/객체생성에대한대안.png)
+    
+## 2.4 의존성 주입 기법 활용하기
+ - SecurityService를 직접 생성하는 대신, 다른 클래스에게 ISecurityService 인터페이스를 구현한 객체를 제공해 줄 것을 요구.
+
+```cs
+class AccountController
+ {
+        private readonly ISecurityService securityService;
+
+
+        //public AccountController()
+        //{
+        //    securityService = new SecurityService();
+        //}
+
+        //DI 기법 활용
+        public AccountController(ISecurityService securityService)
+        {
+            if (securityService == null) throw new ArgumentNullException("securityService");
+
+            this.securityService = securityService;
+        }
+        public void ChangePassword(Guid userID, string newPasswd)
+        {            
+            this.securityService.ChangeUserPasswd(userID, newPasswd);
+        }
+}
+```
+
+
+```cs
+class SecurityService : ISecurityService
+{
+        private readonly IUserRepository userRepository;
+        //public SecurityService()
+        //{
+        //     userRepository = new UserRepository();
+        //}        
+
+        //DI 기법 활용
+        public SecurityService(IUserRepository userRepository)
+        {
+            if (userRepository == null) throw new ArgumentNullException("userRepository");
+            this.userRepository = userRepository;
+        }
+
+        public void ChangeUserPasswd(Guid userID, string passwd)
+        {
+            var user = userRepository.GetByID(userID);
+        }
+}
+```
